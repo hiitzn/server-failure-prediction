@@ -1,0 +1,16 @@
+services:
+
+  agent: 
+    build: ./agent     
+    restart: unless-stopped
+    environment:
+      LISTEN_ADDR:     ":9100"
+      SCRAPE_INTERVAL: "15s"
+      DISK_PATH:       "/"
+      LOG_LEVEL:       "info"
+    ports:
+      - "9100:9100"
+
+
+volumes:
+  prometheus_data:
