@@ -22,5 +22,20 @@ services:
     depends_on:
       - agent
 
+  ml_service:
+        build: ./ml_service
+        restart: unless-stopped
+        environment:
+          PROMETHEUS_URL: "http://prometheus:9090"
+          LOOKBACK_SECONDS: "900"
+          WORKER_INTERVAL_SECONDS: "60"
+          LOG_LEVEL: "INFO"
+        ports:
+          - "8000:8000"
+        depends_on:
+          - prometheus
+          - agent
+
+
 volumes:
   prometheus_data:
