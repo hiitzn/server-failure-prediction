@@ -11,6 +11,16 @@ services:
     ports:
       - "9100:9100"
 
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    restart: unless-stopped
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - agent
 
 volumes:
   prometheus_data:
