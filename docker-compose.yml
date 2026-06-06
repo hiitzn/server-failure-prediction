@@ -11,6 +11,31 @@ services:
     ports:
       - "9100:9100"
 
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    restart: unless-stopped
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - agent
+
+  ml_service:
+        build: ./ml_service
+        restart: unless-stopped
+        environment:
+          PROMETHEUS_URL: "http://prometheus:9090"
+          LOOKBACK_SECONDS: "900"
+          WORKER_INTERVAL_SECONDS: "60"
+          LOG_LEVEL: "INFO"
+        ports:
+          - "8000:8000"
+        depends_on:
+          - prometheus
+          - agent
+
 
 volumes:
   prometheus_data:
