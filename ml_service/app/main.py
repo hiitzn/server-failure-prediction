@@ -8,7 +8,7 @@ import httpx
 from fastapi import FastAPI
 
 from app.api.router import router
-from app.detector import AnalysisService, SigmaDetector
+from app.detector import AnalysisService, IsolationForestDetector, SigmaDetector
 from app.prometheus import AGENT_METRICS, PrometheusClient
 from app.settings import Settings
 from app.worker import AnalysisWorker
@@ -36,6 +36,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             SigmaDetector(
                 threshold=settings.sigma_threshold,
                 min_points=settings.min_data_points,
+            ),
+            IsolationForestDetector(
+                contamination=settings.iforest_contamination,
+                min_points=settings.min_data_points * 2,
             ),
         ]
 

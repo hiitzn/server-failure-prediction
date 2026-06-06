@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
+from datetime import datetime, timezone
 
 
 class DetectorKind(str, Enum):
@@ -31,5 +31,5 @@ class DetectionResult:
     detector: DetectorKind
     is_anomaly: bool
     score: float
-    checked_at: datetime = field(default_factory=datetime.utcnow)
+    checked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     detail: str = ""
