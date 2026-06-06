@@ -1,7 +1,7 @@
 services:
 
-  agent: 
-    build: ./agent     
+  agent:
+    build: ./agent
     restart: unless-stopped
     environment:
       LISTEN_ADDR:     ":9100"
@@ -23,19 +23,35 @@ services:
       - agent
 
   ml_service:
-        build: ./ml_service
-        restart: unless-stopped
-        environment:
-          PROMETHEUS_URL: "http://prometheus:9090"
-          LOOKBACK_SECONDS: "900"
-          WORKER_INTERVAL_SECONDS: "60"
-          LOG_LEVEL: "INFO"
-        ports:
-          - "8000:8000"
-        depends_on:
-          - prometheus
-          - agent
+    build: ./ml_service
+    restart: unless-stopped
+    environment:
+      PROMETHEUS_URL:          "http://prometheus:9090"
+      LOOKBACK_SECONDS:        "900"
+      WORKER_INTERVAL_SECONDS: "60"
+      LOG_LEVEL:               "INFO"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - prometheus
+      - agent
 
+  grafana:
+    image: grafana/grafana:10.4.2
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER:     "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
 
 volumes:
   prometheus_data:
+  grafana_data:
