@@ -81,3 +81,13 @@ Desktop.ini
 *.tmp
 /drafts/
 .vs/
+
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
+.coverage
+.coverage.*
+.coverage
+.coverage.*
