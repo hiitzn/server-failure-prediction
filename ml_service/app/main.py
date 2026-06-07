@@ -7,8 +7,10 @@ from typing import AsyncGenerator
 import httpx
 from fastapi import FastAPI
 
+from app.alert_service import AlertService
 from app.api.router import router
 from app.detector import AnalysisService, IsolationForestDetector, SigmaDetector
+from app.notifications import TelegramConfig, TelegramNotifier
 from app.prometheus import AGENT_METRICS, PrometheusClient
 from app.settings import Settings
 from app.worker import AnalysisWorker
@@ -17,9 +19,7 @@ from app.worker import AnalysisWorker
 def create_app(settings: Settings | None = None) -> FastAPI:
     """
     Application factory.
-
-    Accepting optional settings makes the function easy to use in tests
-    with overridden config (e.g. a mock Prometheus URL).
+    Accepts optional settings so tests can inject overrides without env vars.
     """
     if settings is None:
         settings = Settings()
@@ -30,6 +30,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # ── startup ──────────────────────────────────────────────────────────
         http_client = httpx.AsyncClient()
+
         prometheus = PrometheusClient(settings.prometheus_url, http_client)
 
         detectors = [
@@ -50,10 +51,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             lookback_seconds=settings.lookback_seconds,
         )
 
-        # Store on app.state so the API router can retrieve it.
+        # Build AlertService only when Telegram credentials are present.
+        # Without them the worker runs analysis_service directly —
+        # results are logged but no Telegram message is sent.
+        if settings.telegram_enabled:
+            notifier = TelegramNotifier(
+                config=TelegramConfig(
+                    bot_token=settings.telegram_bot_token,
+                    chat_id=settings.telegram_chat_id,
+                ),
+                http_client=http_client,
+            )
+            runnable = AlertService(
+                analysis=analysis_service,
+                notifier=notifier,
+                cooldown_minutes=settings.alert_cooldown_minutes,
+            )
+            logging.getLogger(__name__).info("telegram alerts enabled")
+        else:
+            runnable = analysis_service
+            logging.getLogger(__name__).warning(
+                "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set — alerts disabled"
+            )
+
+        # analysis_service is stored separately so /analyze endpoint always
+        # has direct access regardless of whether alerts are enabled.
         app.state.analysis_service = analysis_service
 
-        worker = AnalysisWorker(analysis_service, settings.worker_interval_seconds)
+        worker = AnalysisWorker(runnable, settings.worker_interval_seconds)
         worker_task = asyncio.create_task(worker.run())
 
         yield
@@ -78,14 +103,14 @@ def _configure_logging(level: str) -> None:
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
-            "json": {
+            "default": {
                 "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
             }
         },
         "handlers": {
             "console": {
                 "class": "logging.StreamHandler",
-                "formatter": "json",
+                "formatter": "default",
             }
         },
         "root": {"level": level, "handlers": ["console"]},
