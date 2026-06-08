@@ -81,3 +81,26 @@ Desktop.ini
 *.tmp
 /drafts/
 .vs/
+
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
+.coverage
+.coverage.*
+.coverage
+.coverage.*
+
+# Go coverage files
+*.out
+*.out
+coverage
+coverage.out
+*.out
+coverage.html
+*.out
+
+# OS
+.DS_Store
+Thumbs.db
