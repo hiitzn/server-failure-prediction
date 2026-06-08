@@ -24,7 +24,7 @@ jobs:
           cache-dependency-path: agent/go.sum
 
       - name: Download dependencies
-        run: go mod download
+        run: go mod tidy && go mod download
 
       - name: Run tests with coverage
         run: go test ./... -cover
