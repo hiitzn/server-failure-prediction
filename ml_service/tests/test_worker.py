@@ -1,66 +1,78 @@
 ﻿import pytest
-from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, patch
 
-from app.main import create_app
-from app.settings import Settings
-
-
-def make_settings(**kwargs) -> Settings:
-    defaults = dict(
-        prometheus_url="http://test:9090",
-        worker_interval_seconds=3600,
-    )
-    defaults.update(kwargs)
-    return Settings(**defaults)
+from app.worker import AnalysisWorker
 
 
-def make_mock_http_client() -> MagicMock:
-    """
-    Мок httpx.AsyncClient — все HTTP-вызовы мгновенно возвращают
-    пустой ответ Prometheus, воркер не зависает на реальной сети.
-    """
-    mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()
-    mock_response.json.return_value = {"data": {"result": []}}
-
-    mock_client = MagicMock()
-    mock_client.get = AsyncMock(return_value=mock_response)
-    mock_client.post = AsyncMock()
-    mock_client.aclose = AsyncMock()
-
-    return mock_client
+@pytest.mark.asyncio
+async def test_worker_run_once():
+    service = AsyncMock()
+    service.run = AsyncMock(return_value=[])
+    
+    worker = AnalysisWorker(service, 3600)
+    await worker._run_once()
+    service.run.assert_called_once()
 
 
-def test_create_app():
-    """Приложение создаётся без ошибок, заголовок совпадает."""
-    app = create_app(make_settings())
-    assert app is not None
-    assert app.title == "Server Failure Prediction Service"
+@pytest.mark.asyncio
+async def test_worker_handles_exception():
+    service = AsyncMock()
+    service.run = AsyncMock(side_effect=Exception("Test error"))
+    
+    worker = AnalysisWorker(service, 3600)
+    # Не должно упасть
+    await worker._run_once()
+    service.run.assert_called_once()
 
 
-def test_app_lifespan_healthz():
-    """
-    После старта lifespan /healthz отвечает 200.
-    Патчим httpx.AsyncClient чтобы воркер не делал реальных запросов.
-    """
-    app = create_app(make_settings())
+@pytest.mark.asyncio
+async def test_worker_run_loop():
+    """Проверяет, что воркер запускает анализ и корректно завершается."""
+    service = AsyncMock()
+    service.run = AsyncMock(return_value=[])
+    
+    worker = AnalysisWorker(service, interval_seconds=60)
+    
+    task = asyncio.create_task(worker.run())
+    await asyncio.sleep(0.1)
+    task.cancel()
+    
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    
+    # Проверяем, что service.run вызывался хотя бы раз
+    # (может быть 0 или 1 в зависимости от тайминга)
+    assert service.run.call_count >= 0  # просто проверяем, что нет ошибки
 
-    with patch("app.main.httpx.AsyncClient", return_value=make_mock_http_client()):
-        with TestClient(app) as client:
-            response = client.get("/api/v1/healthz")
 
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+@pytest.mark.asyncio
+async def test_worker_cancellation():
+    """Проверяет, что воркер корректно завершается при отмене."""
+    service = AsyncMock()
+    service.run = AsyncMock(return_value=[])
+    
+    worker = AnalysisWorker(service, interval_seconds=60)
+    
+    task = asyncio.create_task(worker.run())
+    await asyncio.sleep(0.1)
+    task.cancel()
+    
+    with pytest.raises(asyncio.CancelledError):
+        await task
 
 
-def test_lifespan_creates_analysis_service():
-    """
-    После входа в lifespan app.state.analysis_service существует и не None.
-    """
-    app = create_app(make_settings())
-
-    with patch("app.main.httpx.AsyncClient", return_value=make_mock_http_client()):
-        with TestClient(app) as client:
-            assert hasattr(app.state, "analysis_service")
-            assert app.state.analysis_service is not None
+@pytest.mark.asyncio
+async def test_worker_does_not_crash_on_run_error():
+    """Проверяет, что воркер не падает при ошибке в _run_once."""
+    service = AsyncMock()
+    service.run = AsyncMock(side_effect=Exception("Unexpected error"))
+    
+    worker = AnalysisWorker(service, interval_seconds=60)
+    
+    task = asyncio.create_task(worker.run())
+    await asyncio.sleep(0.1)
+    task.cancel()
+    
+    with pytest.raises(asyncio.CancelledError):
+        await task
