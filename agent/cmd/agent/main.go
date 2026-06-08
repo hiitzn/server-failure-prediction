@@ -22,15 +22,16 @@ func main() {
 
 	logger := buildLogger(cfg.LogLevel)
 
-	if err := run(cfg, logger); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := run(ctx, cfg, logger); err != nil {
 		logger.Error("agent exited with error", "err", err)
 		os.Exit(1)
 	}
 }
 
-// run contains the real startup logic, separated from main() for testability.
-func run(cfg Config, logger *slog.Logger) error {
-	// Isolated registry keeps our metrics separate from the default one.
+func run(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	reg := prometheus.NewRegistry()
 
 	gauges, err := collector.NewGauges(reg)
@@ -40,17 +41,10 @@ func run(cfg Config, logger *slog.Logger) error {
 
 	sys := collector.NewSystemCollector(cfg.DiskPath)
 	scraper := collector.NewScraper(sys, gauges, cfg.ScrapeInterval, logger)
-
 	srv := server.New(cfg.ListenAddr, reg, logger)
 
-	// Cancel the context on SIGINT / SIGTERM for a clean shutdown.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	// Run the scrape loop in the background.
 	go scraper.Run(ctx)
 
-	// Block until the HTTP server exits (triggered by ctx cancellation).
 	return srv.ListenAndServe(ctx)
 }
 
