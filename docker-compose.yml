@@ -30,6 +30,9 @@ services:
       LOOKBACK_SECONDS:        "900"
       WORKER_INTERVAL_SECONDS: "60"
       LOG_LEVEL:               "INFO"
+
+      TELEGRAM_BOT_TOKEN:      "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID:        "${TELEGRAM_CHAT_ID}"
     ports:
       - "8000:8000"
     depends_on:
